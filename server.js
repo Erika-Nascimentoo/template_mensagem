@@ -262,7 +262,7 @@ const replaceVariablesWithPositional = (body, variableSamples) => {
   let replacedBody = body;
   variableSamples.forEach((variable, index) => {
     const regex = new RegExp(`\\{\\{${variable.name}\\}\\}`, 'g');
-    const replacement = variable.type === 'number' ? `{{${index + 1}}}` : `{{${variable.name}}}`;
+    const replacement = `{{${index + 1}}}`;
     replacedBody = replacedBody.replace(regex, replacement);
   });
   return replacedBody;
@@ -288,19 +288,26 @@ async function createMetaTemplate(templateData) {
       components.push({
         type: "HEADER",
         format: "TEXT",
-        text: getFilledText(templateData.header, templateData.variable_samples)
+        text: replaceVariablesWithPositional(templateData.header, templateData.variable_samples)
       });
     }
 
     components.push({
       type: "BODY",
-      text: getFilledText(templateData.body, templateData.variable_samples)
+      text: replaceVariablesWithPositional(templateData.body, templateData.variable_samples),
+      ...(templateData.variable_samples && templateData.variable_samples.length > 0 ? {
+        example: {
+          body_text: [
+            getFilledText(templateData.body, templateData.variable_samples)
+          ]
+        }
+      } : {})
     });
 
     if (templateData.footer) {
       components.push({
         type: "FOOTER",
-        text: getFilledText(templateData.footer, templateData.variable_samples)
+        text: replaceVariablesWithPositional(templateData.footer, templateData.variable_samples)
       });
     }
 
@@ -310,6 +317,8 @@ async function createMetaTemplate(templateData) {
       language: templateData.language,
       components: components
     };
+
+    console.log('Payload to Meta:', JSON.stringify(payload, null, 2));
 
     const url = `https://graph.facebook.com/v18.0/${process.env.META_PHONE_NUMBER_ID_TEMPLATES}/message_templates`;
     
@@ -332,10 +341,72 @@ async function createMetaTemplate(templateData) {
   }
 }
 
-// Função para obter status do template no Meta
-async function getMetaTemplateStatus(metaId) {
+// Função para editar template no Meta
+async function editMetaTemplate(metaId, templateData) {
   try {
-    const url = `https://graph.facebook.com/v18.0/${metaId}`;
+    const components = [];
+
+    if (templateData.header) {
+      components.push({
+        type: "HEADER",
+        format: "TEXT",
+        text: replaceVariablesWithPositional(templateData.header, templateData.variable_samples)
+      });
+    }
+
+    components.push({
+      type: "BODY",
+      text: replaceVariablesWithPositional(templateData.body, templateData.variable_samples),
+      ...(templateData.variable_samples && templateData.variable_samples.length > 0 ? {
+        example: {
+          body_text: [
+            getFilledText(templateData.body, templateData.variable_samples)
+          ]
+        }
+      } : {})
+    });
+
+    if (templateData.footer) {
+      components.push({
+        type: "FOOTER",
+        text: replaceVariablesWithPositional(templateData.footer, templateData.variable_samples)
+      });
+    }
+
+    const payload = {
+      name: templateData.name,
+      category: templateData.category.toUpperCase(),
+      language: templateData.language,
+      components: components
+    };
+
+    console.log('Payload to Meta:', JSON.stringify(payload, null, 2));
+
+    const url = `https://graph.facebook.com/v25.0/${metaId}`;
+    
+    const config = {
+      headers: {
+        'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    };
+
+    const response = await axios.post(url, payload, config);
+
+    return {
+      meta_id: response.data.id,
+      status: response.data.status ? response.data.status.toLowerCase() : 'pending'
+    };
+  } catch (error) {
+    console.error('Erro ao editar template no Meta:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// Função para obter todos os templates no Meta
+async function getAllMetaTemplates() {
+  try {
+    const url = `https://graph.facebook.com/v25.0/${process.env.META_PHONE_NUMBER_ID_TEMPLATES}/message_templates`;
     
     const config = {
       headers: {
@@ -346,11 +417,37 @@ async function getMetaTemplateStatus(metaId) {
 
     const response = await axios.get(url, config);
 
-    return {
-      status: response.data.status.toLowerCase()
-    };
+    return response.data.data || [];
   } catch (error) {
-    console.error('Erro ao obter status do template no Meta:', error.response?.data || error.message);
+    console.error('Erro ao obter templates do Meta:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// Função para deletar template no Meta
+async function deleteMetaTemplate(name) {
+  try {
+    const url = `https://graph.facebook.com/v25.0/${process.env.META_PHONE_NUMBER_ID_TEMPLATES}/message_templates?name=${name}`;
+    
+    const config = {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${process.env.META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    };
+
+    console.log('Enviando request DELETE para Meta:', JSON.stringify({
+      method: 'DELETE',
+      url: url,
+      headers: config.headers,
+      body: null
+    }, null, 2));
+
+    await axios(url, config);
+    console.log('Template deletado no Meta com sucesso:', name);
+  } catch (error) {
+    console.error('Erro ao deletar template no Meta:', error.response?.data || error.message);
     throw error;
   }
 }
@@ -426,6 +523,8 @@ app.post('/api/templates', async (req, res) => {
     // Aceita tanto variable_samples (snake_case) quanto variableSamples (camelCase)
     const finalVariableSamples = variable_samples || variableSamples || [];
     
+    console.log('finalVariableSamples:', finalVariableSamples);
+    
     const newTemplate = {
       name,
       category: category || 'utility',
@@ -438,61 +537,32 @@ app.post('/api/templates', async (req, res) => {
       language: language
     };
     
-    const { data: savedTemplate, error } = await supabase
-      .from('templates')
-      .insert(newTemplate)
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('Erro ao criar template:', error);
-      return res.status(500).json({ error: 'Erro ao criar template' });
-    }
-
     console.log('Tentando criar template no Meta para:', newTemplate.name);
     try {
       const metaResult = await createMetaTemplate(newTemplate);
       console.log('Template criado no Meta com sucesso:', metaResult);
       
-      console.log('Atualizando template no banco com meta_id:', metaResult.meta_id, 'e status:', metaResult.status);
-      const { error: updateError } = await supabase
-        .from('templates')
-        .update({ 
-          meta_id: metaResult.meta_id, 
-          status: metaResult.status 
-        })
-        .eq('id', savedTemplate.id);
+      // Agora salva no banco com meta_id e status
+      newTemplate.meta_id = metaResult.meta_id;
+      newTemplate.status = metaResult.status;
       
-      if (updateError) {
-        console.error('Erro ao atualizar template com meta_id:', updateError);
-      } else {
-        console.log('Template atualizado com sucesso no banco');
-      }
-      
-      // Retornar template atualizado
-      const { data: updatedTemplate } = await supabase
+      const { data: savedTemplate, error } = await supabase
         .from('templates')
-        .select('*')
-        .eq('id', savedTemplate.id)
+        .insert(newTemplate)
+        .select()
         .single();
       
-      console.log('Template retornado:', updatedTemplate ? 'OK' : 'null');
-      res.json(updatedTemplate);
+      if (error) {
+        console.error('Erro ao criar template:', error);
+        return res.status(500).json({ error: 'Erro ao criar template' });
+      }
+
+      console.log('Template salvo no banco com sucesso');
+      res.json(savedTemplate);
     } catch (metaError) {
       console.error('Falha ao criar template no Meta:', metaError.response?.data || metaError.message);
-      // Se falhar no Meta, ainda salva localmente com status 'FAILED'
-      await supabase
-        .from('templates')
-        .update({ status: 'FAILED' })
-        .eq('id', savedTemplate.id);
-      
-      const { data: updatedTemplate } = await supabase
-        .from('templates')
-        .select('*')
-        .eq('id', savedTemplate.id)
-        .single();
-      
-      res.json(updatedTemplate);
+      // Não salva no banco se falhar na Meta
+      return res.status(400).json({ error: metaError.response?.data?.error?.error_user_title || 'Erro ao criar template na Meta' });
     }
   } catch (error) {
     console.error('Erro no endpoint POST /api/templates:', error);
@@ -508,6 +578,8 @@ app.put('/api/templates/:id', async (req, res) => {
     // Aceita tanto variable_samples (snake_case) quanto variableSamples (camelCase)
     const finalVariableSamples = variable_samples || variableSamples || [];
     
+    console.log('finalVariableSamples:', finalVariableSamples);
+    
     const updateData = {
       name,
       category,
@@ -518,6 +590,33 @@ app.put('/api/templates/:id', async (req, res) => {
       variable_samples: finalVariableSamples,
       language: language
     };
+    
+    // Primeiro, buscar o template atual para obter o meta_id
+    const { data: currentTemplate, error: fetchError } = await supabase
+      .from('templates')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError || !currentTemplate) {
+      return res.status(404).json({ error: 'Template não encontrado' });
+    }
+    
+    // Se tem meta_id, tentar editar no Meta
+    if (currentTemplate.meta_id) {
+      console.log('Tentando editar template no Meta para:', currentTemplate.name);
+      try {
+        const metaResult = await editMetaTemplate(currentTemplate.meta_id, updateData);
+        console.log('Template editado no Meta com sucesso:', metaResult);
+        
+        // Atualizar status se mudou
+        updateData.status = metaResult.status;
+      } catch (metaError) {
+        console.error('Falha ao editar template no Meta:', metaError.response?.data || metaError.message);
+        // Mesmo se falhar no Meta, continua com a atualização local
+        // Talvez definir status como erro ou manter o atual
+      }
+    }
     
     const { data, error } = await supabase
       .from('templates')
@@ -546,6 +645,23 @@ app.delete('/api/templates/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Buscar template
+    const { data: template, error: fetchError } = await supabase
+      .from('templates')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError || !template) {
+      return res.status(404).json({ error: 'Template não encontrado' });
+    }
+    
+    // Deletar no Meta se meta_id existir
+    if (template.meta_id) {
+      await deleteMetaTemplate(template.name);
+    }
+    
+    // Deletar do banco
     const { error } = await supabase
       .from('templates')
       .delete()
@@ -559,7 +675,7 @@ app.delete('/api/templates/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Erro no endpoint DELETE /api/templates:', error);
-    res.status(500).json({ error: 'Erro interno' });
+    res.status(500).json({ error: 'Erro ao excluir template no Meta' });
   }
 });
 
@@ -602,6 +718,75 @@ app.put('/api/templates/:id/status', async (req, res) => {
   } catch (error) {
     console.error('Erro no endpoint PUT /api/templates/:id/status:', error);
     res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.post('/api/sync-templates', async (req, res) => {
+  try {
+    const metaTemplates = await getAllMetaTemplates();
+    
+    let syncedCount = 0;
+    
+    for (const metaTemplate of metaTemplates) {
+      const { id, name, status, language, components, category, created_time, modified_time } = metaTemplate;
+      
+      // Verificar se já existe no banco
+      const { data: existing, error: checkError } = await supabase
+        .from('templates')
+        .select('id')
+        .eq('name', name)
+        .single();
+      
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is not found
+        console.error('Erro ao verificar template existente:', checkError);
+        continue;
+      }
+      
+      if (existing) {
+        console.log(`Template ${name} já existe no banco`);
+        continue;
+      }
+      
+      // Extrair componentes
+      const header = components.find(c => c.type === 'HEADER')?.text || '';
+      const bodyComp = components.find(c => c.type === 'BODY');
+      const body = bodyComp?.text || '';
+      const footer = components.find(c => c.type === 'FOOTER')?.text || '';
+      const buttons = components.find(c => c.type === 'BUTTONS')?.buttons || [];
+      
+      // Inserir no banco
+      const newTemplate = {
+        name,
+        category: category || 'UTILITY',
+        header,
+        body,
+        footer,
+        buttons,
+        variable_samples: [],
+        variable_types: [],
+        language,
+        meta_id: id,
+        status: status.toLowerCase(),
+        created_at: created_time,
+        updated_at: modified_time
+      };
+      
+      const { error: insertError } = await supabase
+        .from('templates')
+        .insert(newTemplate);
+      
+      if (insertError) {
+        console.error('Erro ao inserir template:', insertError);
+      } else {
+        syncedCount++;
+        console.log(`Template ${name} sincronizado`);
+      }
+    }
+    
+    res.json({ success: true, synced: syncedCount });
+  } catch (error) {
+    console.error('Erro no endpoint POST /api/sync-templates:', error);
+    res.status(500).json({ error: 'Erro ao sincronizar templates' });
   }
 });
 

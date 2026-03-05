@@ -1,200 +1,164 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-function Templates() {
+// ── tiny helpers ──────────────────────────────────────────────────────────────
+
+const STATUS_MAP = {
+  approved: { label: 'Aprovado',  bg: '#e8f5e9', color: '#2e7d32', dot: '#43a047' },
+  rejected: { label: 'Rejeitado', bg: '#fce4ec', color: '#b71c1c', dot: '#e53935' },
+  pending:  { label: 'Pendente',  bg: '#fff8e1', color: '#f57f17', dot: '#ffb300' },
+  deleted:  { label: 'Deletado',  bg: '#8b0000', color: '#fff', dot: '#b22222' },
+};
+
+const CATEGORY_ICONS = {
+  UTILITY:        { icon: '⚙️', bg: '#e3f2fd', color: '#1565c0' },
+  MARKETING:      { icon: '📣', bg: '#fce4ec', color: '#880e4f' },
+  AUTHENTICATION: { icon: '🔐', bg: '#ede7f6', color: '#4527a0' },
+};
+
+function TemplateAvatar({ name, category }) {
+  const cat = (category || '').toUpperCase();
+  const meta = CATEGORY_ICONS[cat] || { icon: '📄', bg: '#f5f5f5', color: '#616161' };
+  return (
+    <div style={{
+      width: 36, height: 36, borderRadius: '50%',
+      background: meta.bg, color: meta.color,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 16, flexShrink: 0, userSelect: 'none',
+    }}>
+      {meta.icon}
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  const s = STATUS_MAP[status] || STATUS_MAP.pending;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '3px 10px', borderRadius: 20,
+      fontSize: 12, fontWeight: 500,
+      background: s.bg, color: s.color,
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot, display: 'inline-block' }} />
+      {s.label}
+    </span>
+  );
+}
+
+function IconBtn({ title, color, hoverColor, icon, onClick }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        background: 'none', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 8,
+        color: hov ? (hoverColor || '#333') : (color || '#aaa'),
+        transition: 'color .15s, background .15s',
+        display: 'flex', alignItems: 'center',
+      }}
+    >
+      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{icon}</span>
+    </button>
+  );
+}
+
+// ── main component ────────────────────────────────────────────────────────────
+
+export default function Templates() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tabValue, setTabValue] = useState(0);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [view, setView] = useState('list'); // 'list' | 'form'
+  const [selectedAll, setSelectedAll] = useState(false);
+  const [selected, setSelected] = useState({});
+  const [formData, setFormData] = useState({ id: null, name: '', category: '', header: '', body: '', footer: '', buttons: [], variableSamples: [], language: '' });
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    category: 'UTILITY',
-    header: '',
-    body: '',
-    footer: '',
-    buttons: [],
-    variableSamples: [],
-    language: ''
-  });
-  const [sendForm, setSendForm] = useState({
-    phoneNumber: '',
-    parameters: []
-  });
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [sendForm, setSendForm] = useState({ phoneNumber: '', parameters: [] });
   const [popup, setPopup] = useState({ show: false, message: '', type: 'info' });
-  const [dismissedNotifications, setDismissedNotifications] = useState({});
-  const [confirmDialog, setConfirmDialog] = useState({ show: false, message: '', onConfirm: null });
+  const [confirmDialog, setConfirmDialog] = useState({ show: false, message: '', onConfirm: null, requestPreview: '' });
+  const [hoveredRow, setHoveredRow] = useState(null);
+  const [isApproved, setIsApproved] = useState(false);
 
-  useEffect(() => {
-    fetchTemplates();
-  }, []);
+  useEffect(() => { fetchTemplates(); }, []);
 
   const fetchTemplates = async () => {
     try {
-      const response = await axios.get('/api/templates');
-      // Normalize snake_case to camelCase for consistency
-      const normalizedTemplates = response.data.map(template => ({
-        ...template,
-        variableSamples: template.variable_samples || template.variableSamples || [],
-        language: template.language || 'Não definido',
-        status: template.status ? template.status.toLowerCase() : 'pending'
+      const res = await axios.get('/api/templates');
+      const normalized = res.data.map(t => ({
+        ...t,
+        variableSamples: t.variable_samples || t.variableSamples || [],
+        language: t.language || 'Não definido',
+        status: t.status ? t.status.toLowerCase() : 'pending',
       }));
-      setTemplates(normalizedTemplates);
-    } catch (error) {
-      console.error('Erro ao buscar templates:', error);
+      setTemplates(normalized);
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleTabChange = (newValue) => {
-    setTabValue(newValue);
+  const toggleAll = () => {
+    if (selectedAll) { setSelected({}); setSelectedAll(false); }
+    else { const s = {}; templates.forEach(t => { s[t.id] = true; }); setSelected(s); setSelectedAll(true); }
   };
-
-  const buildMetaPayload = (formData) => {
-    const components = [];
-
-    if (formData.header) {
-      components.push({
-        type: "HEADER",
-        format: "TEXT",
-        text: getFilledText(formData.header, formData.variableSamples)
-      });
-    }
-
-    components.push({
-      type: "BODY",
-      text: getFilledText(formData.body, formData.variableSamples)
-    });
-
-    if (formData.footer) {
-      components.push({
-        type: "FOOTER",
-        text: getFilledText(formData.footer, formData.variableSamples)
-      });
-    }
-
-    const payload = {
-      name: formData.name,
-      category: formData.category.toUpperCase(),
-      language: formData.language,
-      components: components
-    };
-
-    return payload;
-  };
+  const toggleRow = (id) => setSelected(prev => { const n = { ...prev }; n[id] ? delete n[id] : (n[id] = true); return n; });
 
   const handleOpenDialog = (template = null) => {
-    if (template) {
-      setFormData({
-        ...template,
-        variableSamples: template.variableSamples || []
-      });
-      setTabValue(1);
+    if (template && template.status === 'approved') {
+      setPopup({ show: true, message: 'Apenas templates rejeitados podem ser editados. Você está editando um template aprovado.', type: 'info' });
+      setIsApproved(true);
     } else {
-      setFormData({
-        id: null,
-        name: '',
-        category: '',
-        header: '',
-        body: '',
-        footer: '',
-        buttons: [],
-        variableSamples: [],
-        language: ''
-      });
-      setTabValue(1);
+      setIsApproved(false);
     }
-  };
-
-  const handleOpenSendDialog = (template) => {
-    setSelectedTemplate({
-      ...template,
-      variableSamples: template.variableSamples || []
-    });
-    setSendForm({
-      phoneNumber: '',
-      parameters: (template.variableSamples || []).map(v => v.value || '')
-    });
-    setSendDialogOpen(true);
-  };
-
-  const handleCloseSendDialog = () => {
-    setSendDialogOpen(false);
-    setSelectedTemplate(null);
-  };
-
-  const extractVariables = (body) => {
-    const regex = /\{\{([^}]+)\}\}/g;
-    const variables = [];
-    let match;
-    while ((match = regex.exec(body)) !== null) {
-      variables.push(match[1]);
+    if (template) {
+      setFormData({ ...template, variableSamples: template.variableSamples || [] });
+    } else {
+      setFormData({ id: null, name: '', category: '', header: '', body: '', footer: '', buttons: [], variableSamples: [], language: '' });
+      setIsApproved(false);
     }
-    return variables;
-  };
-
-  const updateVariableSamples = (body) => {
-    const variables = extractVariables(body);
-    const currentSamples = formData.variableSamples;
-    const newSamples = variables.map(variable => {
-      const existing = currentSamples.find(sample => sample.name === variable);
-      return existing || { name: variable, value: '', type: 'name' };
-    });
-    return newSamples;
-  };
-
-  const handleBodyChange = (e) => {
-    const newBody = e.target.value;
-    const newSamples = updateVariableSamples(newBody);
-    setFormData({ ...formData, body: newBody, variableSamples: newSamples });
-  };
-
-  const handleVariableTypeChange = (index, type) => {
-    const newSamples = [...formData.variableSamples];
-    newSamples[index].type = type;
-    setFormData({ ...formData, variableSamples: newSamples });
-  };
-
-  const handleVariableSampleChange = (index, value) => {
-    const newSamples = [...formData.variableSamples];
-    newSamples[index].value = value;
-    setFormData({ ...formData, variableSamples: newSamples });
+    setView('form');
   };
 
   const handleSaveTemplate = async () => {
     try {
-      if (formData.id) {
-        await axios.put(`/api/templates/${formData.id}`, formData);
-      } else {
-        await axios.post('/api/templates', formData);
-      }
-
+      if (formData.id) await axios.put(`/api/templates/${formData.id}`, formData);
+      else await axios.post('/api/templates', formData);
       fetchTemplates();
-      setTabValue(0);
+      setView('list');
       setPopup({ show: true, message: 'Template salvo com sucesso!', type: 'success' });
-    } catch (error) {
-      console.error('Erro ao salvar template:', error);
-      setPopup({ show: true, message: 'Erro ao salvar template. Verifique o console.', type: 'error' });
+    } catch (err) {
+      setPopup({ show: true, message: err.response?.data?.error || 'Erro ao salvar template', type: 'error' });
     }
   };
 
-  const handleConfirmDelete = async (id) => {
-    try {
-      await axios.delete(`/api/templates/${id}`);
-      fetchTemplates();
-      setPopup({ show: true, message: 'Template excluído com sucesso!', type: 'success' });
-    } catch (error) {
-      console.error('Erro ao excluir template:', error);
-      setPopup({ show: true, message: 'Erro ao excluir template. Verifique o console.', type: 'error' });
-    }
-  };
-
-  const handleDeleteTemplate = async (id) => {
+  const handleDeleteTemplate = (id) => {
+    const template = templates.find(t => t.id === id);
+    if (!template) return;
     setConfirmDialog({
       show: true,
       message: 'Tem certeza que deseja excluir este template?',
-      onConfirm: () => handleConfirmDelete(id)
+      requestPreview: JSON.stringify({
+        method: 'DELETE',
+        url: `https://graph.facebook.com/v25.0/[META_PHONE_NUMBER_ID_TEMPLATES]/message_templates?name=${template.name}`,
+        headers: {
+          Authorization: "Bearer [TOKEN]"
+        },
+        body: null
+      }, null, 2),
+      onConfirm: async () => {
+        try {
+          await axios.delete(`/api/templates/${id}`);
+          fetchTemplates();
+          setPopup({ show: true, message: 'Template excluído com sucesso!', type: 'success' });
+        } catch {
+          setPopup({ show: true, message: 'Erro ao excluir template.', type: 'error' });
+        }
+      },
     });
   };
 
@@ -202,11 +166,26 @@ function Templates() {
     try {
       await axios.put(`/api/templates/${id}/status`);
       fetchTemplates();
-      setPopup({ show: true, message: 'Status atualizado com sucesso!', type: 'success' });
-    } catch (error) {
-      console.error('Erro ao atualizar status:', error);
+      setPopup({ show: true, message: 'Status atualizado!', type: 'success' });
+    } catch {
       setPopup({ show: true, message: 'Erro ao atualizar status.', type: 'error' });
     }
+  };
+
+  const handleSyncTemplates = async () => {
+    try {
+      const res = await axios.post('/api/sync-templates');
+      fetchTemplates();
+      setPopup({ show: true, message: `${res.data.synced} template(s) sincronizado(s) com sucesso!`, type: 'success' });
+    } catch {
+      setPopup({ show: true, message: 'Erro ao sincronizar templates.', type: 'error' });
+    }
+  };
+
+  const handleOpenSendDialog = (template) => {
+    setSelectedTemplate({ ...template, variableSamples: template.variableSamples || [] });
+    setSendForm({ phoneNumber: '', parameters: (template.variableSamples || []).map(v => v.value || '') });
+    setSendDialogOpen(true);
   };
 
   const handleSendTemplate = async () => {
@@ -214,507 +193,412 @@ function Templates() {
       await axios.post('/api/send-template', {
         to: sendForm.phoneNumber.replace(/\D/g, ''),
         templateName: selectedTemplate.name,
-        parameters: sendForm.parameters.filter(p => p.trim())
+        parameters: sendForm.parameters.filter(p => p.trim()),
       });
-
-      handleCloseSendDialog();
+      setSendDialogOpen(false);
+      setSelectedTemplate(null);
       setPopup({ show: true, message: 'Template enviado com sucesso!', type: 'success' });
-    } catch (error) {
-      console.error('Erro ao enviar template:', error);
-      setPopup({ show: true, message: 'Erro ao enviar template. Verifique o console.', type: 'error' });
+    } catch {
+      setPopup({ show: true, message: 'Erro ao enviar template.', type: 'error' });
     }
+  };
+
+  const extractVariables = (body) => {
+    const regex = /\{\{(\d+)\}\}/g;
+    const vars = [];
+    let m;
+    while ((m = regex.exec(body)) !== null) vars.push(m[1]);
+    return [...new Set(vars)];
+  };
+
+  const handleBodyChange = (e) => {
+    let newBody = e.target.value;
+    if (newBody.endsWith('{{')) {
+      const existing = extractVariables(newBody.slice(0, -2));
+      const nums = existing.map(v => parseInt(v)).filter(n => !isNaN(n));
+      const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+      newBody = newBody.slice(0, -2) + '{{' + next + '}}';
+    }
+    const vars = extractVariables(newBody);
+    const cur = formData.variableSamples;
+    const samples = vars.map(v => cur.find(s => s.name === v) || { name: v, value: '', type: 'number' });
+    setFormData({ ...formData, body: newBody, variableSamples: samples });
   };
 
   const previewTemplate = (template, variableSamples = []) => {
     let preview = template.body || '';
-
-    if (!variableSamples) variableSamples = [];
-
-    variableSamples.forEach((sample) => {
-      if (sample.name && sample.value) {
-        const regex = new RegExp(`{{${sample.name}}}`, 'g');
-        preview = preview.replace(regex, sample.value);
-      }
+    (variableSamples || []).forEach((s) => {
+      if (s.name && s.value) preview = preview.replace(new RegExp(`{{${s.name}}}`, 'g'), s.value);
     });
-
-    variableSamples.forEach((sample, index) => {
-      if (sample.value) {
-        preview = preview.replace(`{{${index + 1}}}`, sample.value);
-      }
-    });
-
     return preview;
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'approved': return 'bg-primary text-white';
-      case 'rejected': return 'bg-red-100 text-red-800';
-      default: return 'bg-yellow-100 text-yellow-800';
+  const buildMetaPayload = (fd) => {
+    const components = [];
+    if (fd.header) components.push({ type: 'HEADER', format: 'TEXT', text: fd.header });
+    const bodyComp = { type: 'BODY', text: fd.body };
+    if (fd.variableSamples && fd.variableSamples.length > 0) {
+      bodyComp.example = { body_text: [previewTemplate(fd, fd.variableSamples)] };
     }
+    components.push(bodyComp);
+    if (fd.footer) components.push({ type: 'FOOTER', text: fd.footer });
+    return { name: fd.name, category: (fd.category || '').toUpperCase(), language: fd.language, components };
   };
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'approved': return 'Aprovado';
-      case 'rejected': return 'Rejeitado';
-      default: return 'Pendente';
-    }
+  // ── STYLES ──────────────────────────────────────────────────────────────────
+
+  const S = {
+    page: { fontFamily: "'DM Sans', sans-serif", minHeight: '100vh', background: '#f7f8fa', padding: '24px 32px' },
+    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
+    titleBlock: {},
+    title: { fontSize: 22, fontWeight: 700, color: '#111', margin: 0 },
+    subtitle: { fontSize: 13, color: '#888', marginTop: 3 },
+    btnPrimary: {
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      background: '#7c3aed', color: '#fff', border: 'none',
+      padding: '10px 18px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+      cursor: 'pointer', transition: 'background .15s',
+    },
+    card: { background: '#fff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,.07)', overflow: 'hidden' },
+    table: { width: '100%', borderCollapse: 'collapse' },
+    thead: { background: '#fafafa', borderBottom: '1px solid #f0f0f0' },
+    th: { padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#999', textAlign: 'left', letterSpacing: '.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' },
+    td: { padding: '14px 16px', fontSize: 14, color: '#222', verticalAlign: 'middle' },
+    nameCell: { display: 'flex', alignItems: 'center', gap: 12 },
+    nameText: { fontWeight: 600, color: '#111', fontSize: 14 },
+    subText: { fontSize: 12, color: '#aaa', marginTop: 1 },
+    divider: { borderTop: '1px solid #f4f4f4', margin: 0 },
+    cbx: { width: 16, height: 16, cursor: 'pointer', accentColor: '#7c3aed' },
+    emptyState: { padding: '60px 0', textAlign: 'center', color: '#bbb', fontSize: 14 },
   };
 
-  const getFilledText = (text, variableSamples) => {
-    let filled = text;
-    variableSamples.forEach((sample) => {
-      if (sample.name && sample.value) {
-        const regex = new RegExp(`\\{\\{${sample.name}\\}\\}`, 'g');
-        filled = filled.replace(regex, sample.value);
-      }
-    });
-    return filled;
-  };
+  // ── RENDER ───────────────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-lg">Carregando...</div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="max-w-7xl mx-auto px-4 py-2">
-        <nav className="bg-primary text-white py-2 mb-2 rounded-lg shadow-md">
-          <div className="px-4 py-3 flex items-center">
-            <span className="material-symbols-outlined text-2xl mr-3">content_copy</span>
-            <h1 className="text-lg font-semibold">Gerenciador de Templates WhatsApp</h1>
-          </div>
-        </nav>
-
-        <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-          <div className="flex space-x-1 border-b border-gray-200">
-            <button
-              onClick={() => handleTabChange(0)}
-              className={`px-4 py-2 text-sm font-medium ${
-                tabValue === 0
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Meus Templates
-            </button>
-            <button
-              onClick={() => handleTabChange(2)}
-              className={`px-4 py-2 text-sm font-medium ${
-                tabValue === 2
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Status dos Templates
-            </button>
-          </div>
-
-          {tabValue === 0 && (
-            <div className="mt-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold">Templates Criados</h2>
-                <button
-                  onClick={() => handleOpenDialog()}
-                  className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary-dark transition-colors flex items-center"
-                >
-                  <svg className="w-5 h-5 mr-2" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="#ffffff">
-                    <path d="M6 12H18M12 6V18" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Novo Template
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {templates.map((template) => (
-                  <div key={template.id} className="border border-gray-300 rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <h3 className="text-base font-semibold">{template.name}</h3>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(template.status)}`}>
-                            {getStatusText(template.status)}
-                          </span>
-                          <span className="px-2 py-1 rounded-full text-xs font-medium border border-gray-300">
-                            {template.category}
-                          </span>
-                        </div>
-                        <div className="mt-2">
-                          <p className="text-sm text-gray-600">{previewTemplate(template)}</p>
-                          {template.footer && (
-                            <p className="text-xs text-gray-500 italic mt-1">{template.footer}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex space-x-2 ml-4">
-                        <button
-                          onClick={() => handleOpenSendDialog(template)}
-                          className="text-blue-600 hover:text-blue-800"
-                          title="Enviar Template"
-                        >
-                          <span className="material-symbols-outlined text-sm">send</span>
-                        </button>
-                        <button
-                          onClick={() => handleOpenDialog(template)}
-                          className="text-gray-600 hover:text-gray-800"
-                          title="Editar Template"
-                        >
-                          <span className="material-symbols-outlined text-sm">edit</span>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTemplate(template.id)}
-                          className="text-red-600 hover:text-red-800"
-                          title="Excluir Template"
-                        >
-                          <span className="material-symbols-outlined text-sm">delete</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {tabValue === 1 && (
-            <div className="mt-4">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Nome do Template *
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="ex: follow_up"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Idioma *
-                      </label>
-                      <select
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                        value={formData.language}
-                        onChange={(e) => setFormData({ ...formData, language: e.target.value })}
-                      >
-                        <option value="" disabled>Selecione o idioma</option>
-                        <option value="pt_BR">Português (Brasil)</option>
-                        <option value="en_US">English (US)</option>
-                        <option value="es_ES">Español</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Categoria *
-                      </label>
-                      <select
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                        value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      >
-                        <option value="" disabled>Selecione a categoria</option>
-                        <option value="utility">Utility</option>
-                        <option value="marketing">Marketing</option>
-                        <option value="authentication">Authentication</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Cabeçalho (opcional)
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                        value={formData.header}
-                        onChange={(e) => setFormData({ ...formData, header: e.target.value })}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Corpo da Mensagem *
-                      </label>
-                      <textarea
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
-                        value={formData.body}
-                        onChange={handleBodyChange}
-                        rows={4}
-                        placeholder="Digite o corpo da mensagem com variáveis como {{nome}}, {{area_caso}}"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Use nome, area_caso para variáveis dinâmicas
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Rodapé (opcional)
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                        value={formData.footer}
-                        onChange={(e) => setFormData({ ...formData, footer: e.target.value })}
-                      />
-                    </div>
-
-                    {formData.variableSamples.length > 0 && (
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <h3 className="text-base font-semibold mb-2">Amostras de Variáveis</h3>
-                        <p className="text-sm text-gray-600 mb-3">
-                          Forneça exemplos para ajudar a Meta a analisar seu modelo.
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {formData.variableSamples.map((variable, index) => (
-                            <div key={index}>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                {`{{${variable.name}}}`}
-                              </label>
-                              <div className="flex space-x-2">
-                                <select
-                                  className="px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-xs"
-                                  value={variable.type}
-                                  onChange={(e) => handleVariableTypeChange(index, e.target.value)}
-                                >
-                                  <option value="name">Nome</option>
-                                  <option value="number">Número</option>
-                                </select>
-                                <input
-                                  type="text"
-                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                                  value={variable.value}
-                                  onChange={(e) => handleVariableSampleChange(index, e.target.value)}
-                                  placeholder="Valor de exemplo"
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h3 className="text-base font-semibold mb-2">Preview do Payload para Meta</h3>
-                      <pre className="bg-white p-2 rounded border text-xs overflow-x-auto">{JSON.stringify(buildMetaPayload(formData), null, 2)}</pre>
-                    </div>
-
-                    <div className="flex justify-end space-x-3">
-                      <button
-                        onClick={() => setTabValue(0)}
-                        className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={handleSaveTemplate}
-                        disabled={!formData.name || !formData.body || !formData.language || !formData.category}
-                        className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                      >
-                        <span className="material-symbols-outlined mr-2 text-sm">save</span>
-                        {formData.id ? 'Atualizar Template' : 'Salvar Template'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="lg:col-span-1">
-                  <div className="sticky top-4">
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h3 className="text-base font-semibold mb-3">Preview</h3>
-
-                      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                        {formData.header && (
-                          <div className="text-sm font-medium text-gray-900 mb-2">
-                            {formData.header}
-                          </div>
-                        )}
-
-                        <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                          {previewTemplate(formData, formData.variableSamples)}
-                        </div>
-
-                        {formData.footer && (
-                          <div className="text-xs text-gray-500 italic mt-2">
-                            {formData.footer}
-                          </div>
-                        )}
-
-                        <div className="text-xs text-gray-400 mt-3">
-                          {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                      <p className="text-xs text-gray-600">
-                        Preview em tempo real - As variáveis serão substituídas pelos valores de exemplo.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {tabValue === 2 && (
-            <div className="mt-4">
-              <h2 className="text-lg font-semibold mb-4">Status dos Templates</h2>
-              <div className="overflow-x-auto">
-                <table className="min-w-full bg-white border border-gray-300">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Idioma</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {templates.map((template) => (
-                      <tr key={template.id}>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{template.name}</td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(template.status)}`}>
-                            {getStatusText(template.status)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{template.category}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{template.language}</td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <button
-                            onClick={() => handleRefreshStatus(template.id)}
-                            className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700"
-                          >
-                            Atualizar Status
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-4 space-y-2">
-                {templates.filter(template => template.status === 'pending' && !dismissedNotifications[template.id]).map((template) => (
-                  <div key={template.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                    <p className="text-sm text-yellow-800">
-                      Template "{template.name}": Você será notificado assim que seu template for aprovado.
-                    </p>
-                    <button
-                      onClick={() => setDismissedNotifications(prev => ({ ...prev, [template.id]: true }))}
-                      className="mt-2 bg-yellow-600 text-white px-3 py-1 rounded text-xs hover:bg-yellow-700"
-                    >
-                      Entendi
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {sendDialogOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold mb-4">
-              Enviar Template: {selectedTemplate?.name}
-            </h2>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Número de Telefone
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  value={sendForm.phoneNumber}
-                  onChange={(e) => setSendForm({ ...sendForm, phoneNumber: e.target.value })}
-                  placeholder="55XXYYYYYYYY"
-                />
-              </div>
-
-              <p className="text-sm text-gray-600">
-                Preview: {selectedTemplate && previewTemplate(selectedTemplate, selectedTemplate.variableSamples.map((v, i) => ({ name: v.name, value: sendForm.parameters[i] || v.value })))}
-              </p>
-            </div>
-
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={handleCloseSendDialog}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSendTemplate}
-                className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary-dark transition-colors flex items-center"
-              >
-                <span className="material-symbols-outlined mr-2 text-sm">send</span>
-                Enviar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {popup.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <p className="text-lg mb-4">{popup.message}</p>
-            <div className="flex justify-end">
-              <button
-                onClick={() => setPopup(prev => ({ ...prev, show: false }))}
-                className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary-dark transition-colors"
-              >
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {confirmDialog.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <p className="text-lg mb-4">{confirmDialog.message}</p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setConfirmDialog(prev => ({ ...prev, show: false }))}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => {
-                  if (confirmDialog.onConfirm) confirmDialog.onConfirm();
-                  setConfirmDialog(prev => ({ ...prev, show: false }));
-                }}
-                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-800 transition-colors"
-              >
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+  if (loading) return (
+    <div style={{ ...S.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ color: '#888', fontSize: 15 }}>Carregando templates…</div>
     </div>
   );
-}
 
-export default Templates;
+  return (
+    <>
+      {/* Google Font */}
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+      <div style={S.page}>
+
+        {/* ── LIST VIEW ─────────────────────────────────────────────────── */}
+        {view === 'list' && (
+          <>
+            <div style={S.header}>
+              <div style={S.titleBlock}>
+                <h1 style={S.title}>Templates</h1>
+                <p style={S.subtitle}>{templates.length} template{templates.length !== 1 ? 's' : ''} encontrado{templates.length !== 1 ? 's' : ''}</p>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button 
+                  style={{ ...S.btnPrimary, background: '#388e3c', border: 'none' }} 
+                  onClick={handleSyncTemplates}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>sync</span> Sincronizar
+                </button>
+                <button style={S.btnPrimary} onClick={() => handleOpenDialog()}>
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Novo Template
+                </button>
+              </div>
+            </div>
+
+            <div style={S.card}>
+              <table style={S.table}>
+                <thead style={S.thead}>
+                  <tr>
+                    <th style={{ ...S.th, width: 40 }}>
+                      <input type="checkbox" style={S.cbx} checked={selectedAll} onChange={toggleAll} />
+                    </th>
+                    <th style={S.th}>Nome</th>
+                    <th style={S.th}>Status</th>
+                    <th style={S.th}>Categoria</th>
+                    <th style={S.th}>Idioma</th>
+                    <th style={S.th}>Última atualização</th>
+                    <th style={{ ...S.th, width: 60 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {templates.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={S.emptyState}>
+                        Nenhum template encontrado.<br />
+                        <span style={{ fontSize: 12, color: '#ccc' }}>Crie um novo para começar.</span>
+                      </td>
+                    </tr>
+                  )}
+                  {templates.map((t, idx) => (
+                    <tr
+                      key={t.id}
+                      onMouseEnter={() => setHoveredRow(t.id)}
+                      onMouseLeave={() => setHoveredRow(null)}
+                      style={{
+                        background: hoveredRow === t.id ? '#faf9ff' : (idx % 2 === 0 ? '#fff' : '#fdfdfd'),
+                        transition: 'background .1s',
+                        borderTop: idx > 0 ? '1px solid #f4f4f4' : 'none',
+                      }}
+                    >
+                      {/* checkbox */}
+                      <td style={{ ...S.td, width: 40 }}>
+                        <input type="checkbox" style={S.cbx} checked={!!selected[t.id]} onChange={() => toggleRow(t.id)} />
+                      </td>
+
+                      {/* name + avatar */}
+                      <td style={S.td}>
+                        <div style={S.nameCell}>
+                          <TemplateAvatar name={t.name} category={t.category} />
+                          <div>
+                            <div style={S.nameText}>{t.name}</div>
+                            {t.body && (
+                              <div style={S.subText}>
+                                {t.body.length > 48 ? t.body.slice(0, 48) + '…' : t.body}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* status */}
+                      <td style={S.td}><StatusBadge status={t.status} /></td>
+
+                      {/* category */}
+                      <td style={{ ...S.td, color: '#555' }}>
+                        <span style={{ fontSize: 13 }}>{t.category || '—'}</span>
+                      </td>
+
+                      {/* language */}
+                      <td style={{ ...S.td, color: '#555', fontSize: 13 }}>{t.language}</td>
+
+                      {/* date */}
+                      <td style={{ ...S.td, color: '#999', fontSize: 13 }}>
+                        {new Date(t.updated_at || t.created_at).toLocaleString('pt-BR')}
+                      </td>
+
+                      {/* actions */}
+                      <td style={{ ...S.td, padding: '8px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, opacity: hoveredRow === t.id ? 1 : 0, transition: 'opacity .15s' }}>
+                          <IconBtn title="Editar" icon="edit" color="#aaa" hoverColor="#7c3aed" onClick={() => handleOpenDialog(t)} />
+                          <IconBtn title="Enviar" icon="send" color="#aaa" hoverColor="#0288d1" onClick={() => handleOpenSendDialog(t)} />
+                          <IconBtn title="Atualizar status" icon="refresh" color="#aaa" hoverColor="#388e3c" onClick={() => handleRefreshStatus(t.id)} />
+                          <IconBtn title="Excluir" icon="delete" color="#aaa" hoverColor="#d32f2f" onClick={() => handleDeleteTemplate(t.id)} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* ── FORM VIEW ─────────────────────────────────────────────────── */}
+        {view === 'form' && (
+          <>
+            <div style={S.header}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button
+                  onClick={() => setView('list')}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888', display: 'flex', alignItems: 'center', gap: 4, fontSize: 14, padding: 0 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
+                  Voltar
+                </button>
+                <h1 style={{ ...S.title, fontSize: 18 }}>{formData.id ? 'Editar Template' : 'Novo Template'}</h1>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24 }}>
+              {/* left */}
+              <div style={{ ...S.card, padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {[
+                  { label: 'Nome do Template *', key: 'name', placeholder: 'ex: follow_up', type: 'input' },
+                ].map(({ label, key, placeholder }) => (
+                  <div key={key}>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>{label}</label>
+                    <input type="text" value={formData[key]} onChange={e => setFormData({ ...formData, [key]: e.target.value })} placeholder={placeholder}
+                      style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e8e8e8', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                  </div>
+                ))}
+
+                {/* language */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>Idioma *</label>
+                  <select value={formData.language} onChange={e => setFormData({ ...formData, language: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e8e8e8', borderRadius: 8, fontSize: 14, outline: 'none', background: '#fff', fontFamily: 'inherit' }}>
+                    <option value="" disabled>Selecione o idioma</option>
+                    <option value="pt_BR">Português (Brasil)</option>
+                    <option value="en_US">English (US)</option>
+                    <option value="es_ES">Español</option>
+                  </select>
+                </div>
+
+                {/* category */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>Categoria *</label>
+                  <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e8e8e8', borderRadius: 8, fontSize: 14, outline: 'none', background: '#fff', fontFamily: 'inherit' }}>
+                    <option value="" disabled>Selecione a categoria</option>
+                    <option value="UTILITY">Utility</option>
+                    <option value="MARKETING">Marketing</option>
+                    <option value="AUTHENTICATION">Authentication</option>
+                  </select>
+                </div>
+
+                {/* header */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>Cabeçalho (opcional)</label>
+                  <input type="text" value={formData.header} onChange={e => setFormData({ ...formData, header: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e8e8e8', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                </div>
+
+                {/* body */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>Corpo da Mensagem *</label>
+                  <textarea value={formData.body} onChange={handleBodyChange} rows={4} placeholder="Digite {{ para inserir variáveis automaticamente."
+                    style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e8e8e8', borderRadius: 8, fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                  <p style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>{'As variáveis são inseridas como {{1}}, {{2}}, etc.'}</p>
+                </div>
+
+                {/* footer */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>Rodapé (opcional)</label>
+                  <input type="text" value={formData.footer} onChange={e => setFormData({ ...formData, footer: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e8e8e8', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                </div>
+
+                {/* variable samples */}
+                {formData.variableSamples.length > 0 && (
+                  <div style={{ background: '#f9f9ff', borderRadius: 10, padding: 16 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Amostras de Variáveis</h3>
+                    <p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Forneça exemplos para a Meta analisar seu template.</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      {formData.variableSamples.map((v, i) => (
+                        <div key={i}>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#666', marginBottom: 4 }}>{`{{${v.name}}}`}</label>
+                          <input type="text" value={v.value}
+                            onChange={e => {
+                              const s = [...formData.variableSamples]; s[i].value = e.target.value;
+                              setFormData({ ...formData, variableSamples: s });
+                            }}
+                            placeholder="Valor de exemplo"
+                            style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #e8e8e8', borderRadius: 7, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* payload preview */}
+                <div style={{ background: '#f7f7f7', borderRadius: 10, padding: 14 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: '#666' }}>Preview do Payload para Meta</h3>
+                  <pre style={{ fontSize: 11, background: '#fff', border: '1px solid #eee', borderRadius: 7, padding: 10, overflowX: 'auto', margin: 0, color: '#444' }}>
+                    {JSON.stringify(buildMetaPayload(formData), null, 2)}
+                  </pre>
+                </div>
+
+                {/* actions */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                  <button onClick={() => setView('list')}
+                    style={{ padding: '10px 20px', border: '1.5px solid #e0e0e0', borderRadius: 9, background: '#fff', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}>
+                    Cancelar
+                  </button>
+                  <button onClick={handleSaveTemplate}
+                    disabled={isApproved || (!formData.name || !formData.body || !formData.language || !formData.category)}
+                    style={{ ...S.btnPrimary, opacity: (isApproved || (!formData.name || !formData.body || !formData.language || !formData.category)) ? .45 : 1 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>save</span>
+                    {isApproved ? 'Aprovado - Não Editável' : (formData.id ? 'Atualizar' : 'Salvar Template')}
+                  </button>
+                </div>
+              </div>
+
+              {/* right: preview */}
+              <div>
+                <div style={{ ...S.card, padding: 20, position: 'sticky', top: 24 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, color: '#555' }}>Pré-visualização</h3>
+                  <div style={{ background: '#e5ddd5', borderRadius: 12, padding: 16 }}>
+                    <div style={{ background: '#fff', borderRadius: 10, padding: '12px 14px', boxShadow: '0 1px 3px rgba(0,0,0,.1)', maxWidth: 260 }}>
+                      {formData.header && <div style={{ fontSize: 13, fontWeight: 700, color: '#111', marginBottom: 6 }}>{formData.header}</div>}
+                      <div style={{ fontSize: 13, color: '#333', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>
+                        {previewTemplate(formData, formData.variableSamples) || <span style={{ color: '#bbb' }}>Corpo da mensagem…</span>}
+                      </div>
+                      {formData.footer && <div style={{ fontSize: 11, color: '#999', fontStyle: 'italic', marginTop: 6 }}>{formData.footer}</div>}
+                      <div style={{ fontSize: 10, color: '#aaa', textAlign: 'right', marginTop: 6 }}>
+                        {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 11, color: '#bbb', marginTop: 12 }}>As variáveis são substituídas pelos valores de exemplo em tempo real.</p>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── SEND DIALOG ──────────────────────────────────────────────── */}
+        {sendDialogOpen && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: 420, boxShadow: '0 8px 40px rgba(0,0,0,.18)' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 18 }}>Enviar: <span style={{ color: '#7c3aed' }}>{selectedTemplate?.name}</span></h2>
+              <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Número de Telefone</label>
+              <input type="text" value={sendForm.phoneNumber} onChange={e => setSendForm({ ...sendForm, phoneNumber: e.target.value })} placeholder="55XXYYYYYYYY"
+                style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 14 }} />
+              {selectedTemplate && (
+                <div style={{ background: '#f4f4f4', borderRadius: 8, padding: 10, fontSize: 13, color: '#555', marginBottom: 16 }}>
+                  {previewTemplate(selectedTemplate, selectedTemplate.variableSamples)}
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button onClick={() => { setSendDialogOpen(false); setSelectedTemplate(null); }}
+                  style={{ padding: '9px 18px', border: '1.5px solid #e0e0e0', borderRadius: 8, background: '#fff', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
+                <button onClick={handleSendTemplate} style={S.btnPrimary}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>send</span> Enviar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── POPUP ─────────────────────────────────────────────────────── */}
+        {popup.show && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: 360, textAlign: 'center', boxShadow: '0 8px 40px rgba(0,0,0,.18)' }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>
+                {popup.type === 'success' ? '✅' : popup.type === 'error' ? '❌' : 'ℹ️'}
+              </div>
+              <p style={{ fontSize: 15, color: '#333', marginBottom: 20 }}>{popup.message}</p>
+              <button onClick={() => setPopup(p => ({ ...p, show: false }))} style={S.btnPrimary}>OK</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── CONFIRM DIALOG ───────────────────────────────────────────── */}
+        {confirmDialog.show && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: 400, boxShadow: '0 8px 40px rgba(0,0,0,.18)' }}>
+              <p style={{ fontSize: 15, color: '#333', marginBottom: 20 }}>{confirmDialog.message}</p>
+              <div style={{ background: '#f7f7f7', borderRadius: 10, padding: 14, marginBottom: 20 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: '#666' }}>Preview da Requisição</h3>
+                <pre style={{ fontSize: 11, background: '#fff', border: '1px solid #eee', borderRadius: 7, padding: 10, overflowX: 'auto', margin: 0, color: '#444' }}>
+                  {confirmDialog.requestPreview}
+                </pre>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button onClick={() => setConfirmDialog(p => ({ ...p, show: false }))}
+                  style={{ padding: '9px 18px', border: '1.5px solid #e0e0e0', borderRadius: 8, background: '#fff', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
+                <button onClick={() => { confirmDialog.onConfirm?.(); setConfirmDialog(p => ({ ...p, show: false })); }}
+                  style={{ padding: '9px 18px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit' }}>Confirmar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </>
+  );
+}

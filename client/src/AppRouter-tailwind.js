@@ -4,55 +4,95 @@ import {
   Routes,
   Route,
   Navigate,
-  Link
+  Link,
+  useLocation
 } from 'react-router-dom';
 import App from './App-tailwind';
 import Templates from './Templates-tailwind';
 import TemplateTest from './TemplateTest-tailwind';
 
+const NAV_ITEMS = [
+  { to: '/',              icon: 'chat',         label: 'Chat' },
+  { to: '/templates',     icon: 'content_copy', label: 'Templates' },
+];
+
+function NavBar() {
+  const { pathname } = useLocation();
+
+  return (
+    <nav style={{
+      position: 'sticky', top: 0, zIndex: 50,
+      background: '#fff',
+      borderBottom: '1px solid #eeeeee',
+      fontFamily: "'DM Sans', sans-serif",
+      boxShadow: '0 1px 4px rgba(0,0,0,.06)',
+    }}>
+      <div style={{
+        maxWidth: 1280, margin: '0 auto',
+        padding: '0 32px',
+        height: 60,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+
+        {/* Logo / brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 9,
+            background: '#7c3aed',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>chat</span>
+          </div>
+          <span style={{ fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '-.01em' }}>
+            Meta Chat Template
+          </span>
+        </div>
+
+        {/* Nav links */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {NAV_ITEMS.map(({ to, icon, label }) => {
+            const active = pathname === to;
+            return (
+              <Link
+                key={to}
+                to={to}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '7px 14px',
+                  borderRadius: 9,
+                  fontSize: 14, fontWeight: active ? 600 : 500,
+                  textDecoration: 'none',
+                  color: active ? '#7c3aed' : '#666',
+                  background: active ? '#f3eeff' : 'transparent',
+                  transition: 'background .15s, color .15s',
+                }}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = '#f7f7f7'; e.currentTarget.style.color = '#333'; } }}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 17 }}>{icon}</span>
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </nav>
+  );
+}
+
 function AppRouter() {
   return (
     <Router>
-      <nav className="bg-primary text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-             
-              <h1 className="text-xl font-bold">Meta Chat Template</h1>
-            </div>
-            <div className="flex space-x-4">
-              <Link
-                to="/"
-                className="text-white hover:bg-primary-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors"
-              >
-                <span className="material-symbols-outlined mr-2 text-base">chat</span>
-                Chat
-              </Link>
-              <Link
-                to="/templates"
-                className="text-white hover:bg-primary-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors"
-              >
-                <span className="material-symbols-outlined mr-2 text-base">content_copy</span>
-                Templates
-              </Link>
-              <Link
-                to="/test-template"
-                className="text-white hover:bg-primary-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors"
-              >
-                <span className="material-symbols-outlined mr-2 text-base">science</span>
-                Teste
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+      <div style={{ minHeight: '100vh', background: '#f7f8fa', fontFamily: "'DM Sans', sans-serif" }}>
+        <NavBar />
         <Routes>
-          <Route path="/" element={<App />} />
-          <Route path="/templates" element={<Templates />} />
+          <Route path="/"              element={<App />} />
+          <Route path="/templates"     element={<Templates />} />
           <Route path="/test-template" element={<TemplateTest />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*"              element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </Router>

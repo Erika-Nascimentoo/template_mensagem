@@ -12,24 +12,10 @@ function App() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    socket.on('connect', () => {
-      setConnected(true);
-      console.log('Conectado ao servidor');
-    });
-
-    socket.on('disconnect', () => {
-      setConnected(false);
-      console.log('Desconectado do servidor');
-    });
-
-    socket.on('initial_messages', (initialMessages) => {
-      setMessages(initialMessages);
-    });
-
-    socket.on('new_message', (message) => {
-      setMessages(prev => [...prev, message]);
-    });
-
+    socket.on('connect', () => { setConnected(true); });
+    socket.on('disconnect', () => { setConnected(false); });
+    socket.on('initial_messages', (initialMessages) => { setMessages(initialMessages); });
+    socket.on('new_message', (message) => { setMessages(prev => [...prev, message]); });
     return () => {
       socket.off('connect');
       socket.off('disconnect');
@@ -39,27 +25,19 @@ function App() {
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, [messages]);
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !phoneNumber.trim()) {
       alert('Por favor, preencha o número de telefone e a mensagem');
       return;
     }
-
     try {
-      const formattedPhone = phoneNumber.replace(/\D/g, '');
-      
       await axios.post('/api/send-message', {
-        to: formattedPhone,
+        to: phoneNumber.replace(/\D/g, ''),
         message: newMessage.trim()
       });
-
       setNewMessage('');
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
@@ -67,115 +45,234 @@ function App() {
     }
   };
 
-  const formatTimestamp = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  const formatTimestamp = (timestamp) =>
+    new Date(timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
   const formatPhoneNumber = (phone) => {
     const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 13) {
+    if (cleaned.length === 13)
       return `+${cleaned.slice(0, 2)} (${cleaned.slice(2, 4)}) ${cleaned.slice(4, 9)}-${cleaned.slice(9)}`;
-    }
     return phone;
   };
 
+  const S = {
+    page: {
+      fontFamily: "'DM Sans', sans-serif",
+      background: '#f7f8fa',
+      minHeight: '100vh',
+      padding: '28px 32px',
+      boxSizing: 'border-box',
+    },
+    inner: {
+      maxWidth: 860,
+      margin: '0 auto',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 20,
+    },
+    // ── header row ──────────────────────────────────────────
+    header: {
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    },
+    titleBlock: {},
+    title: { fontSize: 22, fontWeight: 700, color: '#111', margin: 0 },
+    subtitle: { fontSize: 13, color: '#888', marginTop: 3 },
+    badge: (ok) => ({
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+      background: ok ? '#e8f5e9' : '#fce4ec',
+      color: ok ? '#2e7d32' : '#b71c1c',
+    }),
+    dot: (ok) => ({
+      width: 7, height: 7, borderRadius: '50%',
+      background: ok ? '#43a047' : '#e53935',
+      display: 'inline-block',
+    }),
+    // ── card ────────────────────────────────────────────────
+    card: {
+      background: '#fff',
+      borderRadius: 14,
+      boxShadow: '0 1px 4px rgba(0,0,0,.07)',
+      overflow: 'hidden',
+    },
+    // ── chat area ───────────────────────────────────────────
+    chatBody: {
+      height: 420,
+      overflowY: 'auto',
+      padding: '20px 24px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 4,
+      background: '#ffffff',
+    },
+    emptyChat: {
+      flex: 1, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      color: '#bbb', fontSize: 14, gap: 8,
+    },
+    bubbleOut: {
+      alignSelf: 'flex-end',
+      background: '#343E4F',
+      color: '#ffffff',
+      borderRadius: '14px 14px 4px 14px',
+      padding: '10px 14px',
+      maxWidth: '68%',
+      boxShadow: '0 1px 2px rgba(0,0,0,.08)',
+    },
+    bubbleIn: {
+      alignSelf: 'flex-start',
+      background: '#EFEFF0',
+      color: '#4D5665',
+      borderRadius: '14px 14px 14px 4px',
+      padding: '10px 14px',
+      maxWidth: '68%',
+      boxShadow: '0 1px 2px rgba(0,0,0,.08)',
+    },
+    bubbleText: { fontSize: 14, lineHeight: 1.5, margin: 0 },
+    bubbleMeta: { fontSize: 11, color: '#999', marginTop: 4, textAlign: 'right' },
+    // ── input area ──────────────────────────────────────────
+    inputArea: {
+      padding: '16px 20px',
+      borderTop: '1px solid #f0f0f0',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+    },
+    input: {
+      width: '100%', padding: '10px 14px',
+      border: '1.5px solid #e8e8e8', borderRadius: 9,
+      fontSize: 14, outline: 'none', boxSizing: 'border-box',
+      fontFamily: 'inherit', background: '#fafafa',
+    },
+    row: { display: 'flex', gap: 10 },
+    textarea: {
+      flex: 1, padding: '10px 14px',
+      border: '1.5px solid #e8e8e8', borderRadius: 9,
+      fontSize: 14, outline: 'none', resize: 'none',
+      fontFamily: 'inherit', background: '#fafafa',
+    },
+    sendBtn: (disabled) => ({
+      background: disabled ? '#c4b5fd' : '#7c3aed',
+      color: '#fff', border: 'none',
+      padding: '0 18px', borderRadius: 9,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      transition: 'background .15s', flexShrink: 0,
+    }),
+    // ── info card ───────────────────────────────────────────
+    infoCard: {
+      background: '#fff',
+      borderRadius: 14,
+      boxShadow: '0 1px 4px rgba(0,0,0,.07)',
+      padding: '18px 24px',
+      display: 'flex', gap: 32, flexWrap: 'wrap',
+    },
+    infoItem: { fontSize: 13, color: '#666', lineHeight: 1.7 },
+    infoLabel: { fontWeight: 700, color: '#444' },
+  };
+
+  const isDisabled = !newMessage.trim() || !phoneNumber.trim();
+
   return (
-    <div className="h-screen flex flex-col p-2 max-w-4xl mx-auto">
-      <nav className="bg-primary text-white mb-2 rounded-lg shadow-md">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center">
-            
-            <h1 className="text-lg font-semibold">Meta Chat Template</h1>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="material-symbols-outlined text-sm">chat</span>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-              connected 
-                ? 'bg-green-100 text-green-800 border border-green-300' 
-                : 'bg-red-100 text-red-800 border border-red-300'
-            }`}>
+    <>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+      <div style={S.page}>
+        <div style={S.inner}>
+
+          {/* ── Header ──────────────────────────────────── */}
+          <div style={S.header}>
+            <div style={S.titleBlock}>
+              <h1 style={S.title}>Chat WhatsApp</h1>
+              <p style={S.subtitle}>Envie e receba mensagens em tempo real</p>
+            </div>
+            <span style={S.badge(connected)}>
+              <span style={S.dot(connected)} />
               {connected ? 'Conectado' : 'Desconectado'}
             </span>
           </div>
-        </div>
-      </nav>
 
-      <div className="flex-1 bg-white rounded-lg shadow-md p-4 flex flex-col">
-        <h2 className="text-xl font-semibold mb-4">Chat WhatsApp</h2>
-        
-        <div className="flex-1 overflow-y-auto mb-4 space-y-2 custom-scrollbar">
-          {messages.map((message, index) => (
-            <div
-              key={`${message.id}-${index}`}
-              className={`flex ${
-                message.direction === 'outgoing' ? 'justify-end' : 'justify-start'
-              } py-2`}
-            >
-              <div
-                className={`whatsapp-bubble ${
-                  message.direction === 'outgoing' 
-                    ? 'whatsapp-bubble-outgoing' 
-                    : 'whatsapp-bubble-incoming'
-                }`}
-              >
-                <p className="text-sm">{message.text}</p>
-                <p className="text-xs opacity-70 mt-1">
-                  {message.direction === 'incoming' 
-                    ? `De: ${formatPhoneNumber(message.from)}`
-                    : `Para: ${formatPhoneNumber(message.to)}`
-                  }
-                  {' • '}
-                  {formatTimestamp(message.timestamp)}
-                </p>
+          {/* ── Chat card ───────────────────────────────── */}
+          <div style={S.card}>
+
+            {/* messages */}
+            <div style={S.chatBody}>
+              {messages.length === 0 ? (
+                <div style={S.emptyChat}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 40, color: '#ddd' }}>chat_bubble_outline</span>
+                  Nenhuma mensagem ainda
+                </div>
+              ) : (
+                messages.map((message, index) => {
+                  const out = message.direction === 'outgoing';
+                  return (
+                    <div key={`${message.id}-${index}`} style={{ display: 'flex', justifyContent: out ? 'flex-end' : 'flex-start', marginBottom: 6 }}>
+                      <div style={out ? S.bubbleOut : S.bubbleIn}>
+                        <p style={S.bubbleText}>{message.text}</p>
+                        <p style={S.bubbleMeta}>
+                          {out
+                            ? `Para: ${formatPhoneNumber(message.to)}`
+                            : `De: ${formatPhoneNumber(message.from)}`
+                          }
+                          {' · '}
+                          {formatTimestamp(message.timestamp)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* inputs */}
+            <div style={S.inputArea}>
+              <input
+                type="text"
+                style={S.input}
+                placeholder="Número de telefone — ex: +55 11 99999-9999"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+              />
+              <div style={S.row}>
+                <textarea
+                  style={S.textarea}
+                  placeholder="Digite sua mensagem…"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                  rows={3}
+                />
+                <button style={S.sendBtn(isDisabled)} onClick={sendMessage} disabled={isDisabled}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 22 }}>send</span>
+                </button>
               </div>
             </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
+          </div>
 
-        <div className="flex gap-2 mb-2">
-          <input
-            type="text"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-            placeholder="+55 11 99999-9999"
-            value={phoneNumber}
-            onChange={(e) => setPhoneNumber(e.target.value)}
-          />
-        </div>
+          {/* ── Info row ────────────────────────────────── */}
+          <div style={S.infoCard}>
+            <div style={S.infoItem}>
+              <span style={S.infoLabel}>Status</span><br />
+              {connected
+                ? <span style={{ color: '#2e7d32' }}>✓ Conectado ao servidor</span>
+                : <span style={{ color: '#b71c1c' }}>✗ Desconectado</span>
+              }
+            </div>
+            <div style={S.infoItem}>
+              <span style={S.infoLabel}>Webhook URL</span><br />
+              /webhook/whatsapp
+            </div>
+            <div style={S.infoItem}>
+              <span style={S.infoLabel}>Instruções</span><br />
+              Configure seu webhook no Meta for Developers apontando para esta URL.
+            </div>
+          </div>
 
-        <div className="flex gap-2">
-          <textarea
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
-            placeholder="Digite sua mensagem..."
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-            rows={3}
-          />
-          <button
-            className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-end"
-            onClick={sendMessage}
-            disabled={!newMessage.trim() || !phoneNumber.trim()}
-          >
-            <span className="material-symbols-outlined text-xl">send</span>
-          </button>
         </div>
       </div>
-
-      <div className="mt-2 bg-white rounded-lg shadow-md p-4">
-        <h3 className="text-lg font-semibold mb-2">Configuração</h3>
-        <div className="space-y-1 text-sm text-gray-600">
-          <p>
-            <strong>Status:</strong> {connected ? <span className="text-primary"><span className="material-symbols-outlined text-sm mr-1">check_circle</span>Conectado ao servidor</span> : <span className="text-red-600"><span className="material-symbols-outlined text-sm mr-1">error</span>Desconectado</span>}
-          </p>
-          <p><strong>Webhook URL:</strong> /webhook/whatsapp</p>
-          <p><strong>Instruções:</strong> Configure seu webhook no Meta for Developers apontando para esta URL.</p>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 
