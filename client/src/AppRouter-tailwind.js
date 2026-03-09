@@ -35,19 +35,7 @@ function NavBar() {
       }}>
 
         {/* Logo / brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 9,
-            background: '#7c3aed',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>chat</span>
-          </div>
-          <span style={{ fontSize: 16, fontWeight: 700, color: '#111', letterSpacing: '-.01em' }}>
-            Meta Chat Template
-          </span>
-        </div>
-
+        
         {/* Nav links */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {NAV_ITEMS.map(({ to, icon, label }) => {
@@ -59,11 +47,12 @@ function NavBar() {
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 7,
                   padding: '7px 14px',
-                  borderRadius: 9,
-                  fontSize: 14, fontWeight: active ? 600 : 500,
+                  borderRadius: 0,
+                  fontSize: 14, fontWeight: active ? 500 : 400,
                   textDecoration: 'none',
-                  color: active ? '#7c3aed' : '#666',
-                  background: active ? '#f3eeff' : 'transparent',
+                  color: active ? '#7622E2' : '#666',
+                  background: active ? 'transparent' : 'transparent',
+                  borderBottom: active ? '3px solid #7622E2' : 'none',
                   transition: 'background .15s, color .15s',
                 }}
                 onMouseEnter={e => { if (!active) { e.currentTarget.style.background = '#f7f7f7'; e.currentTarget.style.color = '#333'; } }}

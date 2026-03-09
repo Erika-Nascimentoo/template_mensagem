@@ -248,25 +248,25 @@ export default function Templates() {
   // ── STYLES ──────────────────────────────────────────────────────────────────
 
   const S = {
-    page: { fontFamily: "'DM Sans', sans-serif", minHeight: '100vh', background: '#f7f8fa', padding: '24px 32px' },
+    page: { fontFamily: "'Inter','DM Sans', sans-serif", minHeight: '100vh', background: '#f7f8fa', padding: '24px 32px' },
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
     titleBlock: {},
-    title: { fontSize: 22, fontWeight: 700, color: '#111', margin: 0 },
-    subtitle: { fontSize: 13, color: '#888', marginTop: 3 },
+    title: { fontSize: 22, fontWeight: 700, color: '#252A34', margin: 0 },
+    subtitle: { fontSize: 13, color: '#808C97', marginTop: 3 },
     btnPrimary: {
       display: 'inline-flex', alignItems: 'center', gap: 6,
       background: '#7c3aed', color: '#fff', border: 'none',
-      padding: '10px 18px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+      padding: '10px 18px', borderRadius: 10, fontSize: 14, fontWeight: 400,
       cursor: 'pointer', transition: 'background .15s',
     },
     card: { background: '#fff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,.07)', overflow: 'hidden' },
     table: { width: '100%', borderCollapse: 'collapse' },
     thead: { background: '#fafafa', borderBottom: '1px solid #f0f0f0' },
-    th: { padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#999', textAlign: 'left', letterSpacing: '.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' },
-    td: { padding: '14px 16px', fontSize: 14, color: '#222', verticalAlign: 'middle' },
+    th: { padding: '12px 16px', fontSize: 12, fontWeight: 400, color: '#253426ff', textAlign: 'left', letterSpacing: '.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' },
+    td: { padding: '14px 16px', fontSize: 14, color: '#808C97', verticalAlign: 'middle'},
     nameCell: { display: 'flex', alignItems: 'center', gap: 12 },
-    nameText: { fontWeight: 600, color: '#111', fontSize: 14 },
-    subText: { fontSize: 12, color: '#aaa', marginTop: 1 },
+    nameText: { fontWeight: 500, color: '#342e25ff', fontSize: 14 },
+    subText: { fontSize: 12, color: '#808C97', marginTop: 1 },
     divider: { borderTop: '1px solid #f4f4f4', margin: 0 },
     cbx: { width: 16, height: 16, cursor: 'pointer', accentColor: '#7c3aed' },
     emptyState: { padding: '60px 0', textAlign: 'center', color: '#bbb', fontSize: 14 },
@@ -298,7 +298,7 @@ export default function Templates() {
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button 
-                  style={{ ...S.btnPrimary, background: '#388e3c', border: 'none' }} 
+                  style={{ ...S.btnPrimary, background: 'none', color: '#7622E1', border: '1px solid rgba(118, 34, 225, 0.5)' }} 
                   onClick={handleSyncTemplates}
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: 16 }}>sync</span> Sincronizar
@@ -368,15 +368,15 @@ export default function Templates() {
                       <td style={S.td}><StatusBadge status={t.status} /></td>
 
                       {/* category */}
-                      <td style={{ ...S.td, color: '#555' }}>
+                      <td style={{ ...S.td, color: '#808C97' }}>
                         <span style={{ fontSize: 13 }}>{t.category || '—'}</span>
                       </td>
 
                       {/* language */}
-                      <td style={{ ...S.td, color: '#555', fontSize: 13 }}>{t.language}</td>
+                      <td style={{ ...S.td, color: '#808C97', fontSize: 13 }}>{t.language}</td>
 
                       {/* date */}
-                      <td style={{ ...S.td, color: '#999', fontSize: 13 }}>
+                      <td style={{ ...S.td, color: '#808C97', fontSize: 13 }}>
                         {new Date(t.updated_at || t.created_at).toLocaleString('pt-BR')}
                       </td>
 
